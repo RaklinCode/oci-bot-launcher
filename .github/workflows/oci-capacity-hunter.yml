@@ -14,14 +14,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Install OCI CLI
+        run: pip install --upgrade oci-cli
+
       - name: Configure OCI CLI
-        uses: oracle-actions/configure-oci-cli@v1.4
-        with:
-          user:            ${{ secrets.OCI_USER_OCID }}
-          fingerprint:     ${{ secrets.OCI_FINGERPRINT }}
-          tenancy:         ${{ secrets.OCI_TENANCY_OCID }}
-          region:          ${{ secrets.OCI_REGION }}
-          api_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+        env:
+          OCI_USER:        ${{ secrets.OCI_USER_OCID }}
+          OCI_TENANCY:     ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_REGION:      ${{ secrets.OCI_REGION }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.oci
+          printf '%s\n' "$OCI_PRIVATE_KEY" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=$OCI_USER
+          fingerprint=$OCI_FINGERPRINT
+          tenancy=$OCI_TENANCY
+          region=$OCI_REGION
+          key_file=$HOME/.oci/key.pem
+          EOF
+          chmod 600 ~/.oci/config
 
       - name: Skip if instance already exists
         id: check
@@ -40,8 +55,10 @@ jobs:
 
       - name: Write SSH public key
         if: steps.check.outputs.skip == 'false'
+        env:
+          SSH_PUB: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
         run: |
-          echo "${{ secrets.OCI_SSH_PUBLIC_KEY }}" > /tmp/sshkey.pub
+          echo "$SSH_PUB" > /tmp/sshkey.pub
 
       - name: Launch Ampere A1 (4 OCPU / 24 GB)
         if: steps.check.outputs.skip == 'false'
