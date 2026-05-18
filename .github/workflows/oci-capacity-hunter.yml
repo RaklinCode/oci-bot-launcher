@@ -63,8 +63,8 @@ jobs:
       - name: Launch Ampere A1 (4 OCPU / 24 GB)
         if: steps.check.outputs.skip == 'false'
         run: |
-          set -e
-          oci compute instance launch \
+          set +e
+          output=$(oci compute instance launch \
             --compartment-id "${{ secrets.OCI_COMPARTMENT_OCID }}" \
             --availability-domain "${{ secrets.OCI_AVAILABILITY_DOMAIN }}" \
             --shape VM.Standard.A1.Flex \
@@ -74,8 +74,16 @@ jobs:
             --display-name "trading-bot" \
             --assign-public-ip true \
             --ssh-authorized-keys-file /tmp/sshkey.pub \
-            --wait-for-state RUNNING
-
-      - name: Report success
-        if: steps.check.outputs.skip == 'false'
-        run: echo "Instance launched. Workflow becomes a no-op on future runs."
+            --wait-for-state RUNNING 2>&1)
+          rc=$?
+          echo "$output"
+          if [ $rc -eq 0 ]; then
+            echo "::notice::Instance launched successfully."
+            exit 0
+          elif echo "$output" | grep -q "Out of host capacity"; then
+            echo "::notice::Out of host capacity — will retry on next cron run."
+            exit 0
+          else
+            echo "::error::Unexpected launch failure."
+            exit 1
+          fi
