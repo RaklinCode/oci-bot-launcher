@@ -1,0 +1,64 @@
+name: OCI Ampere capacity hunter
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes (GH Actions may delay under load)
+  workflow_dispatch:         # manual trigger button
+
+concurrency:
+  group: oci-launch
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure OCI CLI
+        uses: oracle-actions/configure-oci-cli@v1.4
+        with:
+          user:            ${{ secrets.OCI_USER_OCID }}
+          fingerprint:     ${{ secrets.OCI_FINGERPRINT }}
+          tenancy:         ${{ secrets.OCI_TENANCY_OCID }}
+          region:          ${{ secrets.OCI_REGION }}
+          api_private_key: ${{ secrets.OCI_PRIVATE_KEY }}
+
+      - name: Skip if instance already exists
+        id: check
+        run: |
+          existing=$(oci compute instance list \
+            --compartment-id "${{ secrets.OCI_COMPARTMENT_OCID }}" \
+            --display-name "trading-bot" \
+            --lifecycle-state RUNNING \
+            --query 'data[0].id' --raw-output 2>/dev/null || echo "")
+          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+            echo "Already running: $existing"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write SSH public key
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          echo "${{ secrets.OCI_SSH_PUBLIC_KEY }}" > /tmp/sshkey.pub
+
+      - name: Launch Ampere A1 (4 OCPU / 24 GB)
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          set -e
+          oci compute instance launch \
+            --compartment-id "${{ secrets.OCI_COMPARTMENT_OCID }}" \
+            --availability-domain "${{ secrets.OCI_AVAILABILITY_DOMAIN }}" \
+            --shape VM.Standard.A1.Flex \
+            --shape-config '{"ocpus":4,"memoryInGBs":24}' \
+            --image-id "${{ secrets.OCI_IMAGE_OCID }}" \
+            --subnet-id "${{ secrets.OCI_SUBNET_OCID }}" \
+            --display-name "trading-bot" \
+            --assign-public-ip true \
+            --ssh-authorized-keys-file /tmp/sshkey.pub \
+            --wait-for-state RUNNING
+
+      - name: Report success
+        if: steps.check.outputs.skip == 'false'
+        run: echo "Instance launched. Workflow becomes a no-op on future runs."
