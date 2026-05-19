@@ -86,8 +86,8 @@ jobs:
             echo "::notice::Instance launched at 4 OCPU / 24 GB."
             echo "launched=true" >> "$GITHUB_OUTPUT"
             exit 0
-          elif echo "$output" | grep -q "Out of host capacity"; then
-            echo "::notice::No capacity at 4/24 — will try 2/12 fallback."
+          elif echo "$output" | grep -qE "Out of host capacity|TooManyRequests|connection to endpoint timed out|InternalServerError|InternalError|ServiceUnavailable|Bad Gateway|status': 5[0-9]{2}"; then
+            echo "::notice::4/24 hit a transient OCI error — will try 2/12 fallback."
             echo "launched=false" >> "$GITHUB_OUTPUT"
             exit 0
           else
@@ -115,8 +115,8 @@ jobs:
           if [ $rc -eq 0 ]; then
             echo "::notice::Instance launched at 2 OCPU / 12 GB."
             exit 0
-          elif echo "$output" | grep -q "Out of host capacity"; then
-            echo "::notice::No capacity at 2/12 either — will retry on next cron run."
+          elif echo "$output" | grep -qE "Out of host capacity|TooManyRequests|connection to endpoint timed out|InternalServerError|InternalError|ServiceUnavailable|Bad Gateway|status': 5[0-9]{2}"; then
+            echo "::notice::2/12 hit a transient OCI error — will retry on next cron run."
             exit 0
           else
             echo "::error::Unexpected launch failure at 2/12."
