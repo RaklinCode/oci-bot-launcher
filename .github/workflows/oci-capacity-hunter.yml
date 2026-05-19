@@ -2,10 +2,11 @@ name: OCI Ampere capacity hunter
 
 on:
   schedule:
-    # Every 15 min at off-peak minutes (avoids :00/:30 when GH load is highest).
-    # 5-min crons are technically supported but GH frequently drops them on
-    # free public repos. 15-min cron fires far more reliably.
-    - cron: '7,22,37,52 * * * *'
+    # Every 5 min — GitHub's hard minimum. GH drops/delays scheduled runs on
+    # free tier under load, so the effective rate will be lower (often more
+    # like every 10–20 min), but this maximizes how often we poll OCI for
+    # Ampere capacity. Pair with workflow_dispatch for manual nudges.
+    - cron: '*/5 * * * *'
   workflow_dispatch:         # manual trigger button
 
 concurrency:
